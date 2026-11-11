@@ -12,7 +12,8 @@ const capabilities = [
   { route: '/activities', empty: { activities: [] }, emptyText: /no activities/i },
   { route: '/teams', empty: { teams: [] }, emptyText: /no teams/i },
   { route: '/leaderboard', empty: { leaderboard: [] }, emptyText: /no (leaderboard|rankings|scores)/i },
-  { route: '/workouts', empty: { suggestions: [] }, emptyText: /no (workout|suggestions)/i },
+  { route: '/users', empty: { users: [] }, emptyText: /no users/i },
+  { route: '/workouts', empty: { workouts: [] }, emptyText: /no workouts/i },
 ];
 
 describe('OctoFit presentation contract', () => {
@@ -25,10 +26,11 @@ describe('OctoFit presentation contract', () => {
     vi.restoreAllMocks();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.includes('/api/activities')) return new Response(JSON.stringify({ activities: [{ type: 'run', minutes: 30, points: 30 }] }), { status: 200 });
-      if (url.includes('/api/teams')) return new Response(JSON.stringify({ teams: [{ name: 'Octocats', members: ['Mona'] }] }), { status: 200 });
-      if (url.includes('/api/leaderboard')) return new Response(JSON.stringify({ leaderboard: [{ teamName: 'Octocats', totalPoints: 90, rank: 1 }] }), { status: 200 });
-      if (/\/api\/workouts\/suggestions\/mona(%40|@)example\.com$/.test(url)) return new Response(JSON.stringify({ suggestions: [{ title: 'Intervals', reason: 'Build endurance' }] }), { status: 200 });
+      if (url.includes('/api/activities/')) return new Response(JSON.stringify({ results: [{ type: 'run', minutes: 30, points: 30 }] }), { status: 200 });
+      if (url.includes('/api/teams/')) return new Response(JSON.stringify([{ name: 'Octocats', members: ['Mona'] }]), { status: 200 });
+      if (url.includes('/api/leaderboard/')) return new Response(JSON.stringify({ leaderboard: [{ teamName: 'Octocats', totalPoints: 90, rank: 1 }] }), { status: 200 });
+      if (url.includes('/api/users/')) return new Response(JSON.stringify({ users: [{ name: 'Mona', email: 'mona@example.com' }] }), { status: 200 });
+      if (url.includes('/api/workouts/')) return new Response(JSON.stringify({ workouts: [{ title: 'Intervals', focus: 'endurance' }] }), { status: 200 });
       return new Response(JSON.stringify({ message: 'Not found' }), { status: 404 });
     }));
   });
@@ -39,20 +41,33 @@ describe('OctoFit presentation contract', () => {
     await waitFor(() => expect(screen.getByText(/run/i)).toBeInTheDocument());
   });
 
-  it('renders teams, leaderboard, and workout suggestions with accessible content', async () => {
+  it('renders teams, leaderboard, users, and workouts with accessible content', async () => {
     const teams = renderRoute('/teams');
     await waitFor(() => expect(screen.getByText(/Octocats/)).toBeInTheDocument());
     teams.unmount();
     const leaderboard = renderRoute('/leaderboard');
     await waitFor(() => expect(screen.getByText(/90/)).toBeInTheDocument());
     leaderboard.unmount();
+    const users = renderRoute('/users');
+    await waitFor(() => expect(screen.getByText(/mona@example.com/)).toBeInTheDocument());
+    users.unmount();
     renderRoute('/workouts');
     await waitFor(() => expect(screen.getByText(/Intervals/)).toBeInTheDocument());
   });
 
-  it('requests workout suggestions for a specific user', async () => {
-    renderRoute('/workouts');
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/\/api\/workouts\/suggestions\/mona(%40|@)example\.com$/)));
+  it('provides navigation links to all REST-backed sections', () => {
+    renderRoute('/');
+    for (const name of ['Activities', 'Teams', 'Leaderboard', 'Users', 'Workouts']) {
+      expect(screen.getByRole('link', { name })).toBeInTheDocument();
+    }
+  });
+
+  it('requests the collection endpoint for each component', async () => {
+    for (const route of ['/activities', '/teams', '/leaderboard', '/users', '/workouts']) {
+      const screenResult = renderRoute(route);
+      await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`/api/${route.slice(1)}/$`))));
+      screenResult.unmount();
+    }
   });
 
   for (const capability of capabilities) {
